@@ -96,7 +96,11 @@ describe('getActiveProviderConfig', () => {
   it('returns config for openai when API key is set', () => {
     const settings = loadSettings();
     settings.activeProvider = 'openai';
-    settings.openai = { ...settings.openai, apiKey: 'sk-test-123' };
+    settings.openai = {
+      ...settings.openai,
+      apiKey: 'sk-test-123',
+      baseUrl: 'http://127.0.0.1:11434/v1',
+    };
     saveSettings(settings);
 
     const config = getActiveProviderConfig();

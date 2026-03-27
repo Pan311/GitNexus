@@ -11,10 +11,15 @@
  * Seed data is NOT included — each test provides its own via options.seed.
  */
 /// <reference path="../vitest.d.ts" />
+import fs from 'fs/promises';
 import path from 'path';
 import { describe, beforeAll, afterAll, inject } from 'vitest';
 import type { TestDBHandle } from './test-db.js';
-import { NODE_TABLES, EMBEDDING_TABLE_NAME } from '../../src/core/lbug/schema.js';
+import { createTempDir } from './test-db.js';
+import {
+  NODE_TABLES,
+  EMBEDDING_TABLE_NAME,
+} from '../../src/core/lbug/schema.js';
 
 export interface IndexedDBHandle {
   /** Path to the LadybugDB database file */
@@ -75,8 +80,12 @@ export function withTestLbugDB(
   const timeout = options?.timeout ?? 30000;
 
   const setup = async () => {
-    // Get shared DB path from globalSetup (created once with full schema)
-    const dbPath = inject<'lbugDbPath'>('lbugDbPath');
+    // Get shared DB template path from globalSetup, then copy it so each test
+    // suite uses its own isolated DB file and avoids cross-worker file locks.
+    const sharedDbPath = inject<'lbugDbPath'>('lbugDbPath');
+    const sharedTmpHandle = await createTempDir(`gitnexus-shared-copy-${prefix}-`);
+    const dbPath = path.join(sharedTmpHandle.dbPath, 'lbug');
+    await fs.copyFile(sharedDbPath, dbPath);
     const repoId = `test-${prefix}-${Date.now()}-${repoCounter++}`;
 
     const adapter = await import('../../src/core/lbug/lbug-adapter.js');
@@ -91,11 +100,7 @@ export function withTestLbugDB(
     // 3. Drop stale FTS indexes from previous test file
     if (options?.ftsIndexes?.length) {
       for (const idx of options.ftsIndexes) {
-        try {
-          await adapter.dropFTSIndex(idx.table, idx.indexName);
-        } catch {
-          /* may not exist */
-        }
+        try { await adapter.dropFTSIndex(idx.table, idx.indexName); } catch { /* may not exist */ }
       }
     }
 
@@ -138,6 +143,7 @@ export function withTestLbugDB(
         await poolAdapter.closeLbug(repoId);
       }
       await adapter.closeLbug();
+      await sharedTmpHandle.cleanup();
     };
 
     // tmpHandle.dbPath → parent temp dir (not the lbug file) so tests
@@ -154,8 +160,7 @@ export function withTestLbugDB(
 
   const lazyHandle = new Proxy({} as IndexedDBHandle, {
     get(_target, prop) {
-      if (!ref.handle)
-        throw new Error('withTestLbugDB: handle not initialized — beforeAll has not run yet');
+      if (!ref.handle) throw new Error('withTestLbugDB: handle not initialized — beforeAll has not run yet');
       return (ref.handle as any)[prop];
     },
   });
@@ -168,9 +173,7 @@ export function withTestLbugDB(
     // native resource cleanup.  The vitest hookTimeout (120s) should apply
     // automatically, but some vitest versions fall back to testTimeout (30s)
     // for afterAll.  Pass 120s explicitly to avoid CI flakes on Windows.
-    afterAll(async () => {
-      if (ref.handle) await ref.handle.cleanup();
-    }, 120_000);
+    afterAll(async () => { if (ref.handle) await ref.handle.cleanup(); }, 120_000);
     fn(lazyHandle);
   });
 }
