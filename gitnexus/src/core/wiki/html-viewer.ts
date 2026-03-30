@@ -7,6 +7,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
+import { isLocalOnlyMode } from '../../config/security-mode.js';
 
 interface ModuleTreeNode {
   name: string;
@@ -60,10 +61,6 @@ function esc(text: string): string {
     .replace(/"/g, '&quot;');
 }
 
-const isLocalOnlyMode = process.env.GITNEXUS_LOCAL_ONLY === undefined
-  || process.env.GITNEXUS_LOCAL_ONLY === ''
-  || (process.env.GITNEXUS_LOCAL_ONLY !== '0' && process.env.GITNEXUS_LOCAL_ONLY !== 'false');
-
 function serializeForInlineScript(value: unknown): string {
   return JSON.stringify(value)
     .replace(/</g, '\\u003c')
@@ -83,6 +80,7 @@ function buildHTML(
   const pagesJSON = serializeForInlineScript(pages);
   const treeJSON = serializeForInlineScript(moduleTree);
   const metaJSON = serializeForInlineScript(meta);
+  const localOnlyMode = isLocalOnlyMode();
 
   const parts: string[] = [];
 
@@ -93,7 +91,7 @@ function buildHTML(
   parts.push('<meta charset="UTF-8">');
   parts.push('<meta name="viewport" content="width=device-width, initial-scale=1.0">');
   parts.push('<title>' + esc(projectName) + ' — Wiki</title>');
-  if (!isLocalOnlyMode) {
+  if (!localOnlyMode) {
     parts.push('<script src="https://cdn.jsdelivr.net/npm/marked@11.0.0/marked.min.js"><\/script>');
     parts.push('<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"><\/script>');
     parts.push('<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"><\/script>');

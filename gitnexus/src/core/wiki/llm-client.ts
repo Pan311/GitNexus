@@ -6,6 +6,7 @@
  *
  * Config priority: CLI flags > env vars > defaults
  */
+import { isLocalOnlyMode as getProcessLocalOnlyMode } from '../../config/security-mode.js';
 
 export type LLMProvider = 'openai' | 'openrouter' | 'azure' | 'custom' | 'cursor';
 
@@ -29,12 +30,8 @@ export interface LLMResponse {
   completionTokens?: number;
 }
 
-const isLocalOnlyEnabled = (value: string | undefined): boolean => (
-  value === undefined || value === '' || (value !== '0' && value !== 'false')
-);
-
 export const isLocalOnlyMode = (): boolean => (
-  isLocalOnlyEnabled(process.env.GITNEXUS_LOCAL_ONLY)
+  getProcessLocalOnlyMode()
 );
 
 export const isLoopbackUrl = (rawUrl: string | undefined): boolean => {

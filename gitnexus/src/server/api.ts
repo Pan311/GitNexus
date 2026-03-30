@@ -15,17 +15,14 @@ import fs from 'fs/promises';
 import { loadMeta, listRegisteredRepos } from '../storage/repo-manager.js';
 import { executeQuery, closeLbug, withLbugDb } from '../core/lbug/lbug-adapter.js';
 import { NODE_TABLES } from '../core/lbug/schema.js';
-import { GraphNode, GraphRelationship } from '../core/graph/types.js';
+import type { GraphNode, GraphRelationship } from 'gitnexus-shared';
 import { searchFTSFromLbug } from '../core/search/bm25-index.js';
 import { hybridSearch } from '../core/search/hybrid-search.js';
 // Embedding imports are lazy (dynamic import) to avoid loading onnxruntime-node
 // at server startup — crashes on unsupported Node ABI versions (#89)
 import { LocalBackend } from '../mcp/local/local-backend.js';
 import { mountMCPEndpoints } from './mcp-http.js';
-
-const isLocalOnlyEnabled = (value: string | undefined): boolean => (
-  value === undefined || value === '' || (value !== '0' && value !== 'false')
-);
+import { isLocalOnlyMode } from '../config/security-mode.js';
 
 const isLoopbackHost = (host: string): boolean => (
   host === '127.0.0.1' || host === 'localhost' || host === '::1'
@@ -196,7 +193,7 @@ export const createServer = async (
   host: string = '127.0.0.1',
   opts?: { localOnly?: boolean },
 ) => {
-  const localOnly = !!opts?.localOnly || isLocalOnlyEnabled(process.env.GITNEXUS_LOCAL_ONLY);
+  const localOnly = !!opts?.localOnly || isLocalOnlyMode();
   if (localOnly && !isLoopbackHost(host)) {
     throw new Error('Local-only mode requires --host to be loopback (127.0.0.1, localhost, or ::1).');
   }
