@@ -27,6 +27,7 @@ import type {
 } from './types';
 import { type CodebaseContext, buildDynamicSystemPrompt } from './context-builder';
 import { DEFAULT_OLLAMA_BASE_URL, DEFAULT_OPENROUTER_BASE_URL } from '../../config/ui-constants';
+import { isLocalOnlyMode, isLoopbackUrl } from '../../config/security-mode';
 
 /**
  * System prompt for the Graph RAG agent
@@ -125,6 +126,34 @@ BAD:  A[User's Data] --> B(Process & Save)
 GOOD: A["User Data"] --> B["Process and Save"]
 `;
 export const createChatModel = (config: ProviderConfig): BaseChatModel => {
+  if (isLocalOnlyMode()) {
+    switch (config.provider) {
+      case 'ollama': {
+        const baseUrl = (config as OllamaConfig).baseUrl ?? DEFAULT_OLLAMA_BASE_URL;
+        if (!isLoopbackUrl(baseUrl)) {
+          throw new Error(`Local-only mode requires Ollama base URL to be local (got: ${baseUrl})`);
+        }
+        break;
+      }
+      case 'openai': {
+        const baseUrl = (config as OpenAIConfig).baseUrl;
+        if (!isLoopbackUrl(baseUrl)) {
+          throw new Error('Local-only mode only allows OpenAI-compatible endpoints on localhost/127.0.0.1/::1');
+        }
+        break;
+      }
+      case 'glm': {
+        const baseUrl = (config as GLMConfig).baseUrl;
+        if (!isLoopbackUrl(baseUrl)) {
+          throw new Error('Local-only mode only allows GLM endpoints on localhost/127.0.0.1/::1');
+        }
+        break;
+      }
+      default:
+        throw new Error(`Local-only mode does not allow provider: ${config.provider}`);
+    }
+  }
+
   switch (config.provider) {
     case 'openai': {
       const openaiConfig = config as OpenAIConfig;

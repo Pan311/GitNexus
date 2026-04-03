@@ -29,6 +29,24 @@ export interface LLMResponse {
   completionTokens?: number;
 }
 
+const isLocalOnlyEnabled = (value: string | undefined): boolean => (
+  value === undefined || value === '' || (value !== '0' && value !== 'false')
+);
+
+export const isLocalOnlyMode = (): boolean => (
+  isLocalOnlyEnabled(process.env.GITNEXUS_LOCAL_ONLY)
+);
+
+export const isLoopbackUrl = (rawUrl: string | undefined): boolean => {
+  if (!rawUrl) return false;
+  try {
+    const parsed = new URL(rawUrl);
+    return parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname === '::1';
+  } catch {
+    return false;
+  }
+};
+
 /**
  * Resolve LLM configuration from env vars, saved config, and optional overrides.
  * Priority: overrides (CLI flags) > env vars > ~/.gitnexus/config.json > error

@@ -47,6 +47,7 @@ program
   .description('Start local HTTP server for web UI connection')
   .option('-p, --port <port>', 'Port number', '4747')
   .option('--host <host>', 'Bind address (default: 127.0.0.1, use 0.0.0.0 for remote access)')
+  .option('--local-only', 'Strict local mode: loopback-only host and localhost-only CORS')
   .action(createLazyAction(() => import('./serve.js'), 'serveCommand'));
 
 program
@@ -93,6 +94,7 @@ program
   .option('--no-reasoning-model', 'Disable reasoning model mode (overrides saved config)')
   .option('--concurrency <n>', 'Parallel LLM calls (default: 3)', '3')
   .option('--gist', 'Publish wiki as a public GitHub Gist after generation')
+  .option('--local-only', 'Strict local mode: local LLM endpoint only and gist publishing disabled')
   .option('-v, --verbose', 'Enable verbose output (show LLM commands and responses)')
   .option('--review', 'Stop after grouping to review module structure before generating pages')
   .action(createLazyAction(() => import('./wiki.js'), 'wikiCommand'));

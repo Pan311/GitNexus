@@ -20,6 +20,7 @@ import {
   ProviderConfig,
 } from './types';
 import { DEFAULT_OPENROUTER_BASE_URL, DEFAULT_OLLAMA_BASE_URL } from '../../config/ui-constants';
+import { isLocalOnlyMode, isLoopbackUrl } from '../../config/security-mode';
 
 const STORAGE_KEY = 'gitnexus-llm-settings';
 
@@ -319,6 +320,20 @@ const providerBuilders: Record<LLMProvider, ProviderBuilder> = {
 
 export const getActiveProviderConfig = (): ProviderConfig | null => {
   const settings = loadSettings();
+  if (isLocalOnlyMode()) {
+    if (settings.activeProvider === 'ollama') {
+      const baseUrl = settings.ollama?.baseUrl ?? DEFAULT_OLLAMA_BASE_URL;
+      if (!isLoopbackUrl(baseUrl)) return null;
+    } else if (settings.activeProvider === 'openai') {
+      const baseUrl = settings.openai?.baseUrl;
+      if (!isLoopbackUrl(baseUrl)) return null;
+    } else if (settings.activeProvider === 'glm') {
+      const baseUrl = settings.glm?.baseUrl;
+      if (!isLoopbackUrl(baseUrl)) return null;
+    } else {
+      return null;
+    }
+  }
   const builder = providerBuilders[settings.activeProvider];
   return builder ? builder(settings) : null;
 };

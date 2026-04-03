@@ -18,29 +18,28 @@ interface ModuleTreeNode {
 /**
  * Generate the wiki HTML viewer (index.html) from existing markdown pages.
  */
-export async function generateHTMLViewer(wikiDir: string, projectName: string): Promise<string> {
+export async function generateHTMLViewer(
+  wikiDir: string,
+  projectName: string,
+): Promise<string> {
   // Load module tree
   let moduleTree: ModuleTreeNode[] = [];
   try {
     const raw = await fs.readFile(path.join(wikiDir, 'module_tree.json'), 'utf-8');
     moduleTree = JSON.parse(raw);
-  } catch {
-    /* will show empty nav */
-  }
+  } catch { /* will show empty nav */ }
 
   // Load meta
   let meta: Record<string, unknown> | null = null;
   try {
     const raw = await fs.readFile(path.join(wikiDir, 'meta.json'), 'utf-8');
     meta = JSON.parse(raw);
-  } catch {
-    /* no meta */
-  }
+  } catch { /* no meta */ }
 
   // Read all markdown files into a { slug: content } map
   const pages: Record<string, string> = {};
   const dirEntries = await fs.readdir(wikiDir);
-  for (const f of dirEntries.filter((f) => f.endsWith('.md'))) {
+  for (const f of dirEntries.filter(f => f.endsWith('.md'))) {
     const content = await fs.readFile(path.join(wikiDir, f), 'utf-8');
     pages[f.replace(/\.md$/, '')] = content;
   }
@@ -61,18 +60,29 @@ function esc(text: string): string {
     .replace(/"/g, '&quot;');
 }
 
+const isLocalOnlyMode = process.env.GITNEXUS_LOCAL_ONLY === undefined
+  || process.env.GITNEXUS_LOCAL_ONLY === ''
+  || (process.env.GITNEXUS_LOCAL_ONLY !== '0' && process.env.GITNEXUS_LOCAL_ONLY !== 'false');
+
+function serializeForInlineScript(value: unknown): string {
+  return JSON.stringify(value)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
+
 function buildHTML(
   projectName: string,
   moduleTree: ModuleTreeNode[],
   pages: Record<string, string>,
   meta: Record<string, unknown> | null,
 ): string {
-  // Embed data as JSON inside the HTML.
-  // Escape </script> sequences so they don't prematurely close the <script> tag.
-  const escScript = (s: string) => s.replace(/<\//g, '<\\/');
-  const pagesJSON = escScript(JSON.stringify(pages));
-  const treeJSON = escScript(JSON.stringify(moduleTree));
-  const metaJSON = escScript(JSON.stringify(meta));
+  // Embed data as JSON inside the HTML
+  const pagesJSON = serializeForInlineScript(pages);
+  const treeJSON = serializeForInlineScript(moduleTree);
+  const metaJSON = serializeForInlineScript(meta);
 
   const parts: string[] = [];
 
@@ -83,10 +93,11 @@ function buildHTML(
   parts.push('<meta charset="UTF-8">');
   parts.push('<meta name="viewport" content="width=device-width, initial-scale=1.0">');
   parts.push('<title>' + esc(projectName) + ' — Wiki</title>');
-  parts.push('<script src="https://cdn.jsdelivr.net/npm/marked@11.0.0/marked.min.js"><\/script>');
-  parts.push(
-    '<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"><\/script>',
-  );
+  if (!isLocalOnlyMode) {
+    parts.push('<script src="https://cdn.jsdelivr.net/npm/marked@11.0.0/marked.min.js"><\/script>');
+    parts.push('<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"><\/script>');
+    parts.push('<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"><\/script>');
+  }
   parts.push('<style>');
   parts.push(CSS);
   parts.push('</style>');
@@ -94,9 +105,7 @@ function buildHTML(
 
   // ── Body ──
   parts.push('<body>');
-  parts.push(
-    '<button class="menu-toggle" id="menu-toggle" aria-label="Toggle menu">&#9776;</button>',
-  );
+  parts.push('<button class="menu-toggle" id="menu-toggle" aria-label="Toggle menu">&#9776;</button>');
   parts.push('<div class="layout">');
 
   // Sidebar
@@ -215,9 +224,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
 const JS_APP = `
 (function() {
   var activePage = 'overview';
+  var HAS_MARKED = typeof marked !== 'undefined' && typeof marked.parse === 'function';
+  var HAS_DOMPURIFY = typeof DOMPurify !== 'undefined' && typeof DOMPurify.sanitize === 'function';
+  var HAS_MERMAID = typeof mermaid !== 'undefined';
 
   document.addEventListener('DOMContentLoaded', function() {
-    mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose' });
+    if (HAS_MERMAID) {
+      mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'strict' });
+    }
     renderMeta();
     renderNav();
     document.getElementById('menu-toggle').addEventListener('click', function() {
@@ -302,7 +316,8 @@ const JS_APP = `
       return;
     }
 
-    contentEl.innerHTML = marked.parse(md);
+    var rendered = HAS_MARKED ? marked.parse(md) : '<pre>' + escH(md) + '</pre>';
+    contentEl.innerHTML = HAS_DOMPURIFY ? DOMPurify.sanitize(rendered) : rendered;
 
     // Rewrite .md links to hash navigation
     var links = contentEl.querySelectorAll('a[href]');
@@ -329,7 +344,9 @@ const JS_APP = `
       div.textContent = mermaidBlocks[i].textContent;
       pre.parentNode.replaceChild(div, pre);
     }
-    try { mermaid.run({ querySelector: '.mermaid' }); } catch(e) {}
+    if (HAS_MERMAID) {
+      try { mermaid.run({ querySelector: '.mermaid' }); } catch(e) {}
+    }
 
     window.scrollTo(0, 0);
     document.getElementById('sidebar').classList.remove('open');
